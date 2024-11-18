@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>This  Space Launches</title>
+    <title>This Year's Space Launches</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://d3js.org/d3.v5.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
@@ -12,26 +12,34 @@
     <div id="loading" class="loading">
         <svg id="loading-globe"></svg>
         <div class="progress-container">
-            <div class="progress-bar" id="progressBar">
+            <div class="progress-bar">
                 <div class="progress-fill"></div>
             </div>
             <span class="progress-text">0%</span>
         </div>
     </div>
+    
     <div id="content" style="display: none;">
         <div class="main-container">
             <div class="left-column">
+                <h1 class="page-title">Space Launches</h1>
+                <div id="total-launches" class="total-launches">Total launches worldwide this year: Loading...</div>
                 <div class="globe-container">
                     <svg id="globe"></svg>
                 </div>
                 <div id="next-launch-card" class="next-launch-card"></div>
             </div>
-            <div id="results" class="results-container">
-                <h1><script>document.write(new Date().getFullYear());</script> Space Launches</h1>
-                <p id="total-launches">Total launches worldwide this year: Loading...</p>
-                <h2>Top 10 Launch Locations in <script>document.write(new Date().getFullYear());</script></h2>
-                <div id="location-grid" class="location-grid"></div>
+            <div class="right-column">
+                <h2>Top 10 Launch Locations</h2>
+                <div class="results-container">
+                    <div id="location-grid" class="location-grid"></div>
+                </div>
             </div>
+        </div>
+    
+        <div id="launch-type-chart" style="width: 100%; max-width: 800px; height: 400px; margin-top: 30px;">
+            <h2>Launches by Nation and Mission Type</h2>
+            <svg id="stacked-bar-chart"></svg>
         </div>
     </div>
     <script src="launchStats.js"></script>

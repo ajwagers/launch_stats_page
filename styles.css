@@ -12,6 +12,20 @@ body {
     margin: 0;
     padding: 0;
     min-height: 100vh;
+    overflow-y: auto
+}
+
+.page-title {
+    text-align: left;
+    color: var(--accent-color);
+    margin: 1rem 0;
+    font-size: clamp(1.5rem, 4vw, 2.5rem);
+}
+
+.total-launches {
+    text-align: left;
+    margin-bottom: 1rem;
+    font-size: clamp(1rem, 2vw, 1.25rem);
 }
 
 #loading-globe {
@@ -69,6 +83,7 @@ body {
     max-width: 1200px;
     margin: auto;
     padding: 20px;
+    box-sizing: border-box;
 }
 
 .main-container {
@@ -76,50 +91,98 @@ body {
     justify-content: space-between;
     align-items: flex-start;
     width: 100%;
-    max-width: 1400px;
-    margin: auto;
-    padding: 20px;
+    gap: 20px;
+    height: calc(100vh);
+    min-height: 400px;
 }
 
 .left-column {
     flex: 0 0 300px;
-    margin-right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
 }
 
 .globe-container {
-    flex: 0 0 400px;
+    flex: 0 0 auto;
 }
 
 #globe {
-    width: 400px;
-    height: 400px;
+    width: 300px;
+    height: 300px;
 }
 
 .location-grid {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    grid-template-rows: repeat(2, auto);
-    gap: 15px;
-    margin-top: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    height: 100%;
+    overflow-y: auto;
+    padding-right: 10px
 }
 
 .location-card {
     background-color: var(--card-bg);
-    padding: 10px;
+    padding: clamp(8px, 1.5vh, 15px);
     border-radius: 8px;
-    border: 1px solid;
-    border-color: var(--accent-color);
-    font-size: 0.9em
+    border: 1px solid var(--accent-color);
+    display: flex;
+    align-items: center;
+    gap: clamp(10px, 2%, 20px);
+    min-height: 0;
+    flex-shrink: 0;
+}
+
+.launch-count {
+    font-size: clamp(1.5rem, 3vh, 2.5rem);
+    font-weight: bold;
+    color: var(--accent-color);
+    min-width: clamp(60px, 15%, 100px);
+    text-align: center;
+    padding: clamp(5px, 1vh, 10px);
+    border-right: 1px solid var(--accent-color);
 }
 
 .location-card h3 {
     margin: 0 0 5px 0;
-    font-size: 1em;
+    font-size: clamp(0.8rem, 1.5vh, 1em);
 }
 
 .location-card p {
     margin: 3px 0;
-    font-size: 0.8em;
+    font-size: clamp(0.7rem, 1.2vh, 0.8em);
+}
+
+.launch-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.launch-details h3 {
+    margin: 0 0 10px 0;
+    font-size: 1.2em;
+    color: var(--accent-color);
+}
+
+.launch-details p {
+    margin: 5px 0;
+    font-size: 0.9em;
+}
+
+.launch-info {
+    display: flex;
+    gap: clamp(10px, 2%, 20px);
+    margin-top: 5px;
+    font-size: clamp(0.7rem, 1.2vh, 0.8em);
+}
+
+.last-launch, .next-launch {
+    flex: 1;
+    min-width: 0;
+}
+
+.next-launch {
+    color: var(--accent-color);
 }
 
 .next-launch-card {
@@ -127,10 +190,35 @@ body {
     padding: 15px;
     border-radius: 8px;
     border: 2px solid var(--accent-color);
+    font-size: clamp(0.8rem, 1.5vh, 1em);
+}
+
+/* Scrollbar styling */
+.location-grid::-webkit-scrollbar {
+    width: 8px;
+}
+
+.location-grid::-webkit-scrollbar-track {
+    background: var(--bg-color);
+    border-radius: 4px;
+}
+
+.location-grid::-webkit-scrollbar-thumb {
+    background: var(--accent-color);
+    border-radius: 4px;
 }
 
 .results-container {
     flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+.results-container h2 {
+    margin: 0 0 1rem 0;
+    font-size: clamp(1rem, 2vw, 1.5rem);
 }
 
 .image-placeholder {
@@ -148,4 +236,21 @@ body {
     height: 40px;
     line-height: 40px;
     padding: 0;
+}
+
+/* Media Queries */
+@media (max-width: 768px) {
+    .main-container {
+        flex-direction: column;
+        height: auto;
+    }
+
+    .left-column {
+        width: 100%;
+        align-items: center;
+    }
+
+    .location-grid {
+        max-height: 60vh;
+    }
 }

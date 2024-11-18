@@ -13,11 +13,31 @@ function createProgressBar() {
 }
 
 function createEmptyCards() {
-    const locationGrid = document.getElementById('location-grid');
+    const locationGrid = document.querySelector('.location-grid');
+    locationGrid.innerHTML = ''; // Clear any existing content
     for (let i = 0; i < 10; i++) {
         const card = document.createElement('div');
         card.className = 'location-card';
-        card.innerHTML = `<h3>Loading...</h3><p>Launches: --</p>`;
+        card.innerHTML = `
+            <div class="launch-count">--</div>
+            <div class="launch-details">
+                <h3>Loading...</h3>
+                <p>Country: --</p>
+                <div class="launch-info">
+                    <div class="last-launch">
+                        <strong>Last Launch:</strong><br>
+                        Loading...
+                    </div>
+                    <div class="next-launch">
+                        <strong>Next Launch:</strong><br>
+                        Loading...
+                    </div>
+                    <div>
+                    FLAG
+                    </div>
+                </div>
+            </div>
+        `;
         locationGrid.appendChild(card);
     }
 }
@@ -28,61 +48,88 @@ function createNextLaunchCard() {
         <h3>Next Upcoming Launch</h3>
         <p>Loading...</p>
     `;
-    //document.querySelector('.results-container').insertBefore(card, document.getElementById('location-grid'));
 }
 
 async function fetchLaunchData() {
     const currentYear = new Date().getFullYear();
-    const apiUrl = 'https://lldev.thespacedevs.com/2.3.0/launches/?format=json&mode=detailed&net__gte=' + currentYear + '-01-01T00%3A00%3A00Z&net__lte=' + currentYear + '-12-31T23%3A59%3A59Z';
-    const nextLaunchUrl = 'https://lldev.thespacedevs.com/2.3.0/launches/upcoming/?limit=1';
+    const utcDateTime = new Date().toISOString();
+    const baseApiUrl = 'https://ll.thespacedevs.com/2.3.0/launches/';
+    const apiUrl = `${baseApiUrl}?format=json&mode=detailed&net__gte=${currentYear}-01-01T00%3A00%3A00Z&net__lte=${currentYear}-12-31T23%3A59%3A59Z&limit=200&status__ids=3`;
+    const nextLaunchUrl = `${baseApiUrl}?net__gt=${utcDateTime}&status__ids=1,2,8`;
+
     createProgressBar();
     createLoadingGlobe();
     createEmptyCards();
     createNextLaunchCard();
 
+    let launches = [];
+    let topLocations = [];
+    let nextLaunches = [];
+
     try {
-        let allLaunches = [];
-        let nextUrl = apiUrl;
-        let totalCount;
+        // Make initial request to get the total count
+        const initialResponse = await fetch(apiUrl);
+        if (!initialResponse.ok) {
+            throw new Error('Failed to fetch launch data');
+        }
+        
+        const initialData = await initialResponse.json();
+        const totalCount = initialData.count;
+        console.log(`Total launches to fetch: ${totalCount}`);
+        
+        launches = [...initialData.results];
+        let nextUrl = initialData.next;
+        
+        progressBar.update((launches.length / totalCount) * 100);
 
         while (nextUrl) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
             const response = await fetch(nextUrl);
             if (!response.ok) {
-                throw new Error('Network response was not ok');
+                throw new Error('Failed to fetch launch data');
             }
+            
             const data = await response.json();
-            allLaunches = allLaunches.concat(data.results);
+            launches = launches.concat(data.results);
             nextUrl = data.next;
             
-            if (!totalCount) {
-                totalCount = data.count;
-            }
-
-            const progress = (allLaunches.length / totalCount) * 100;
-            progressBar.update(Math.min(progress, 90));
+            const progress = Math.min((launches.length / totalCount) * 100, 90);
+            console.log(`Fetched ${launches.length} of ${totalCount} launches`);
+            progressBar.update(progress);
         }
 
-        const { totalLaunches, topLocations } = processLaunchData(allLaunches);
-        updateCards(topLocations);
-        document.getElementById('total-launches').textContent = `Total launches worldwide: ${totalLaunches}`;
+        console.log(`Completed fetching ${launches.length} launches`);
 
-        const nextLaunchResponse = await fetch(nextLaunchUrl);
-        const nextLaunchData = await nextLaunchResponse.json();
-        nextLaunch = {
-            location: nextLaunchData.results[0]?.pad?.location?.name || 'Unknown',
-            latitude: nextLaunchData.results[0]?.pad?.latitude || '--',
-            longitude: nextLaunchData.results[0]?.pad?.longitude || '--',
-            net: new Date(nextLaunchData.results[0]?.net || 'Unknown')
-        };
+        const processedData = processLaunchData(launches);
+        topLocations = processedData.topLocations;
+        
 
-        progressBar.update(100);
-        createGlobe(topLocations);
-        updateNextLaunchCard(nextLaunch);
+        // Fetch next launch data
+        try {
+            const nextLaunchResponse = await fetch(nextLaunchUrl);
+            const nextLaunchData = await nextLaunchResponse.json();
 
-        setTimeout(() => {
-            document.getElementById('loading').style.display = 'none';
-            document.getElementById('content').style.display = 'block';
-        }, 1000);
+            // Process all upcoming launches
+            nextLaunches = nextLaunchData.results.map(launch => ({
+                name: launch.name || 'Unknown',
+                location: launch.pad?.location?.name || 'Unknown',
+                latitude: launch.pad?.latitude || '--',
+                longitude: launch.pad?.longitude || '--',
+                net: new Date(launch.net || 'Unknown')
+            }));
+
+            // Get the very next launch for the globe
+            const nextLaunch = nextLaunches[0];
+
+            updateNextLaunchCard(nextLaunch);
+            createGlobe(topLocations, nextLaunch);
+            processAndDisplayData(launches,nextLaunches);
+
+        } catch (error) {
+            console.error('Error fetching next launch data:', error);
+            updateNextLaunchCard(null);
+        }
 
     } catch (error) {
         console.error('Error fetching launch data:', error);
@@ -90,16 +137,35 @@ async function fetchLaunchData() {
     }
 }
 
+function processAndDisplayData(allLaunches,nextLaunches) {
+    const { totalLaunches, topLocations, topTenLocations } = processLaunchData(allLaunches);
+    updateCards(topTenLocations,nextLaunches);
+    const totalLaunchesElement = document.getElementById('total-launches');
+    if (totalLaunchesElement) {
+        totalLaunchesElement.textContent = `Total launches worldwide: ${totalLaunches}`;
+    }
+
+    progressBar.update(100);
+    setTimeout(() => {
+        const loadingElement = document.getElementById('loading');
+        const contentElement = document.getElementById('content');
+        if (loadingElement) loadingElement.style.display = 'none';
+        if (contentElement) contentElement.style.display = 'block';
+    }, 1000);
+}
+
 function processLaunchData(launches) {
     const locationCounts = {};
     launches.forEach(launch => {
         if (launch.status && launch.status.abbrev === 'Success') {
             const locationName = launch.pad?.location?.name || 'Unknown Location';
-            const country = launch.pad?.location?.country_code || 'Unknown';
+            const country = launch.pad?.location?.country?.name || 'Unknown';
+            const country_code = launch.pad?.location?.country?.alpha_2_code || 'Unknown'
             if (!locationCounts[locationName]) {
                 locationCounts[locationName] = {
                     count: 0,
                     country: country,
+                    country_code: country_code,
                     latitude: launch.pad?.latitude || 0,
                     longitude: launch.pad?.longitude || 0,
                     launches: []
@@ -115,57 +181,122 @@ function processLaunchData(launches) {
 
     const sortedLocations = Object.entries(locationCounts)
         .sort((a, b) => b[1].count - a[1].count)
-        .slice(0, 10);
+        //.slice(0, 10);
 
-    return { totalLaunches: launches.length, topLocations: sortedLocations };
+    return {
+        totalLaunches: launches.length, 
+        topLocations: sortedLocations.slice(0, 15), // Keep 15 for the globe
+        topTenLocations: sortedLocations.slice(0, 10) // Only show top 10 in cards
+    };
 }
 
-function updateCards(topLocations) {
-    const cards = document.querySelectorAll('.location-card');
-    topLocations.forEach((location, index) => {
-        const [name, data] = location;
-        const card = cards[index];
-        let lastLaunchHTML = '';
-        let nextLaunchHTML = '';
+function categorizeLaunchesByMission(launches) {
+    const missionCategories = {
+        Suborbital: 'Suborbital',
+        LEO: 'Low Earth Orbit',
+        MEO: 'Medium Earth Orbit',
+        Geosynchronous: 'Geosynchronous',
+        DeepSpace: 'Deep Space'
+    };
+
+    const countryLaunchData = {};
+
+    launches.forEach(launch => {
+        const country = launch.pad?.location?.country_code || 'Unknown';
+        const missionType = determineMissionType(launch);
+
+        if (!countryLaunchData[country]) {
+            countryLaunchData[country] = {
+                Suborbital: 0,
+                LEO: 0,
+                MEO: 0,
+                Geosynchronous: 0,
+                DeepSpace: 0
+            };
+        }
+        countryLaunchData[country][missionType]++;
+    });
+
+    return countryLaunchData;
+}
+
+function determineMissionType(launch) {
+    // Check if launch.mission and launch.mission.orbit exist and are strings
+    if (launch.mission && typeof launch.mission.orbit === 'string') {
+        const orbit = launch.mission.orbit.toLowerCase();
+        if (orbit.includes("suborbital")) return "Suborbital";
+        if (orbit.includes("leo")) return "LEO";
+        if (orbit.includes("meo")) return "MEO";
+        if (orbit.includes("geo")) return "Geosynchronous";
+        if (orbit.includes("deep")) return "DeepSpace";
+    }
+    return "Unknown";
+}
+
+function updateCards(topLocations,nextLaunches) {
+    const locationGrid = document.querySelector('.location-grid');
+    if (!locationGrid) {
+        console.error('Location grid element not found');
+        return;
+    }
+    locationGrid.innerHTML = '';
+
+    topLocations.forEach(([name, data]) => {
+        const card = document.createElement('div');
+        const flagUrl = `https://flagsapi.com/${data.country_code}/flat/64.png`;
+        card.className = 'location-card';
 
         // Get last launch details
-        const lastLaunch = data.launches.reduce((prev, current) => {
-            return (prev.net > current.net) ? prev : current;
-        }, { net: new Date(0), name: 'N/A' });
+        const lastLaunch = data.launches
+            .filter(launch => new Date(launch.net) < new Date())
+            .sort((a, b) => new Date(b.net) - new Date(a.net))[0];
 
-        // Get next launch details
-        const nextLaunch = data.launches.reduce((prev, current) => {
-            return (prev.net < current.net) ? current : prev;
-        }, { net: new Date(9999, 11, 31), name: 'N/A' });
+        // Find next launch for this location
+        const nextLaunch = nextLaunches.find(launch => launch.location === name);
 
-        if (lastLaunch.net.getTime() > 0) {
-            lastLaunchHTML = `
-                <p>Last Launch: ${lastLaunch.name}</p>
-                <p>Date: ${lastLaunch.net.toLocaleString()}</p>
-            `;
-        }
-
-        if (nextLaunch.net.getTime() < new Date(9999, 11, 31).getTime()) {
-            nextLaunchHTML = `
-                <p>Next Launch: ${nextLaunch.name}</p>
-                <p>Date: ${nextLaunch.net.toLocaleString()}</p>
-            `;
-        }
+         // Format last launch display
+         let lastLaunchHTML = 'No previous launches';
+         if (lastLaunch) {
+             lastLaunchHTML = `
+                 ${lastLaunch.name}<br>
+                 ${new Date(lastLaunch.net).toLocaleDateString()}
+             `;
+         }
+ 
+         // Format next launch display
+         let nextLaunchHTML = 'No scheduled launches';
+         if (nextLaunch) {
+             nextLaunchHTML = `
+                 ${nextLaunch.name}<br>
+                 ${nextLaunch.net.toLocaleDateString()}
+             `;
+         }
 
         card.innerHTML = `
-            <h3>${name}</h3>
-            <p>Successful launches: ${data.count}</p>
-            <p>Country: ${data.country}</p>
-            ${lastLaunchHTML}
-            ${nextLaunchHTML}
+            <div class="launch-count">${data.count}</div>
+            <div class="launch-details">
+                <h3>${name}</h3>
+                <p>Country: ${data.country}</p>
+                <div class="launch-info">
+                    <div class="last-launch">
+                        <strong>Last Launch:</strong><br>
+                        ${lastLaunchHTML}
+                    </div>
+                    <div class="next-launch">
+                        <strong>Next Launch:</strong><br>
+                        ${nextLaunchHTML}
+                    </div>
+                    <div>
+                        <img src="${flagUrl}" alt="${data.country} Flag" width="64" height="64">
+                    </div>
+                </div>
+            </div>
         `;
 
-        if (nextLaunch.net.getTime() > new Date().getTime()) {
-            card.classList.add('next-launch-card');
-            blinkCard(card);
-        }
+        locationGrid.appendChild(card);
     });
 }
+
 
 
 function createLoadingGlobe() {
@@ -203,7 +334,7 @@ function createLoadingGlobe() {
     d3.timer(rotateGlobe);
 }
 
-function createGlobe(topLocations) {
+function createGlobe(topLocations,nextLaunch) {
     const width = 300;
     const height = 300;
     const sensitivity = 75;
@@ -265,27 +396,58 @@ function createGlobe(topLocations) {
                     .attr('r', 5)
                     .attr('fill', 'rgb(255, 0, 0)');
 
-                function blinkNextLaunch() {
-                    const timeUntilLaunch = nextLaunch.net - new Date();
-                    const blinkRate = Math.max(100, 1000 - timeUntilLaunch / 60000);
-                    const t = d3.now() % 30 / 3000;
-                    const color = d3.interpolateRgb("rgb(255, 0, 0)", "rgb(0, 0, 255)")(t);
+                // Create an array of colors to cycle through
+                const colors = [
+                    '#ff0000', // Red
+                    '#ff00ff', // Magenta
+                    '#0000ff', // Blue
+                    '#00ffff', // Cyan
+                    '#00ff00', // Green
+                    '#ffff00', // Yellow
+                    '#ff0000'  // Back to red to complete the cycle
+                ];
+
+                // Create a color interpolator that cycles through all colors
+                const colorScale = d3.scaleLinear()
+                    .domain(d3.range(colors.length).map(d => d / (colors.length - 1)))
+                    .range(colors)
+                    .interpolate(d3.interpolateRgb);
+
+                function rgbCycle() {
+                    const duration = 3000; // Complete cycle every 3 seconds
+                    
                     nextLaunchDot.transition()
-                        .duration(blinkRate / 2)
-                        .attr('opacity', 0)
-                        .transition()
-                        .duration(blinkRate / 2)
-                        .attr('opacity', 1)
-                        .attr('fill', color)
-                        .on('end', blinkNextLaunch);
+                        .duration(duration)
+                        .ease(d3.easeLinear)
+                        .attrTween('fill', () => {
+                            return (t) => colorScale(t);
+                        })
+                        .on('end', rgbCycle); // Loop the animation
                 }
 
-                blinkNextLaunch();
+                rgbCycle();
+
+                //function blinkNextLaunch() {
+                //    const timeUntilLaunch = nextLaunch.net - new Date();
+                //    const blinkRate = Math.max(1000, 1000 - timeUntilLaunch / 60000);
+                //    const t = d3.now() % 3000 / 3000;
+                //    const color = d3.interpolateRgb("rgb(255, 0, 0)", "rgb(0, 0, 255)")(t);
+                //    nextLaunchDot.transition()
+                //        .duration(blinkRate / 2)
+                //        .attr('opacity', 0)
+                //        .transition()
+                //        .duration(blinkRate / 2)
+                //        .attr('opacity', 1)
+                //        .attr('fill', color)
+                //        .on('end', blinkNextLaunch);
+                //}
+                //
+                //blinkNextLaunch();
             }
 
             function rotateGlobe() {
                 const rotation = projection.rotate();
-                rotation[0] += 0.5;
+                rotation[0] += 0.3;
                 projection.rotate(rotation);
                 g.selectAll('path').attr('d', path);
                 locationPoints
@@ -312,6 +474,34 @@ function updateNextLaunchCard(nextLaunch) {
             <p>Date: ${nextLaunch.net.toLocaleString()}</p>
             <p>Coordinates: ${nextLaunch.latitude.toFixed(4)}, ${nextLaunch.longitude.toFixed(4)}</p>
         `;
+
+    // Add RGB border effect to match the globe point
+    const colors = [
+        '#ff0000', // Red
+        '#ff00ff', // Magenta
+        '#0000ff', // Blue
+        '#00ffff', // Cyan
+        '#00ff00', // Green
+        '#ffff00', // Yellow
+        '#ff0000'  // Back to red
+    ];
+
+    const colorScale = d3.scaleLinear()
+        .domain(d3.range(colors.length).map(d => d / (colors.length - 1)))
+        .range(colors)
+        .interpolate(d3.interpolateRgb);
+
+    let startTime = Date.now();
+    
+    function updateBorder() {
+        const elapsed = Date.now() - startTime;
+        const t = (elapsed % 3000) / 3000; // 3 second cycle
+        card.style.borderColor = colorScale(t);
+        requestAnimationFrame(updateBorder);
+    }
+
+    updateBorder();
+
     } else {
         card.innerHTML = `
             <h3>Next Upcoming Launch</h3>
@@ -330,6 +520,81 @@ function blinkCard(card) {
         setTimeout(blink, blinkRate / 2);
     }
     blink();
+}
+
+function drawStackedBarChart(data) {
+    const svg = d3.select("#stacked-bar-chart");
+    const width = 800;
+    const height = 400;
+    const margins = { top: 20, right: 30, bottom: 50, left: 60 };
+
+    svg.attr("width", width).attr("height", height);
+
+    const countries = Object.keys(data);
+    const missionTypes = ["Suborbital", "LEO", "MEO", "Geosynchronous", "DeepSpace"];
+
+    // Prepare data for stacking
+    const series = d3.stack()
+        .keys(missionTypes)
+        .value((d, key) => d[1][key])
+        (Object.entries(data));
+
+    const x = d3.scaleBand()
+        .domain(countries)
+        .range([margins.left, width - margins.right])
+        .padding(0.1);
+
+    const y = d3.scaleLinear()
+        .domain([0, d3.max(series, s => d3.max(s, d => d[1]))]).nice()
+        .range([height - margins.bottom, margins.top]);
+
+    const color = d3.scaleOrdinal()
+        .domain(missionTypes)
+        .range(d3.schemeCategory10);
+
+    svg.append("g")
+        .selectAll("g")
+        .data(series)
+        .join("g")
+        .attr("fill", d => color(d.key))
+        .selectAll("rect")
+        .data(d => d)
+        .join("rect")
+        .attr("x", d => x(d.data[0]))
+        .attr("y", d => y(d[1]))
+        .attr("height", d => y(d[0]) - y(d[1]))
+        .attr("width", x.bandwidth());
+
+    svg.append("g")
+        .attr("transform", `translate(0,${height - margins.bottom})`)
+        .call(d3.axisBottom(x).tickSizeOuter(0))
+        .selectAll("text")
+        .attr("transform", "rotate(-45)")
+        .style("text-anchor", "end");
+
+    svg.append("g")
+        .attr("transform", `translate(${margins.left},0)`)
+        .call(d3.axisLeft(y));
+
+    // Legend
+    const legend = svg.append("g")
+        .attr("transform", `translate(${width - margins.right}, ${margins.top})`)
+        .selectAll("g")
+        .data(missionTypes.slice().reverse())
+        .enter().append("g")
+        .attr("transform", (d, i) => `translate(0,${i * 20})`);
+
+    legend.append("rect")
+        .attr("x", -19)
+        .attr("width", 19)
+        .attr("height", 19)
+        .attr("fill", color);
+
+    legend.append("text")
+        .attr("x", -24)
+        .attr("y", 9.5)
+        .attr("dy", "0.32em")
+        .text(d => d);
 }
 
 document.addEventListener('DOMContentLoaded', fetchLaunchData);
